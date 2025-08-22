@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Laundry Dashboard (Owner)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    #login { margin-top: 48px; }
+    button { padding: 10px 16px; cursor:pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background:#f5f5f5; }
+    input[type="search"]{ padding:10px; width: 340px; }
+    .topbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <h1>🧺 Laundry Dashboard</h1>
+
+  <div id="login">
+    <p>Owner access only. Please log in:</p>
+    <button onclick="netlifyIdentity.open()">Login</button>
+  </div>
+
+  <div id="app" style="display:none;">
+    <div class="topbar">
+      <div>Welcome, <span id="ownerName"></span></div>
+      <button onclick="netlifyIdentity.logout()">Logout</button>
+      <input type="search" id="q" placeholder="Search name/phone/clothes…" />
+    </div>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Ticket</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Clothes</th>
+          <th>Qty</th>
+          <th>Drop-off</th>
+          <th>Notes</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const app = document.getElementById("app");
+    const login = document.getElementById("login");
+    const ownerName = document.getElementById("ownerName");
+    const tbody = document.querySelector("#tbl tbody");
+
+    // Show dashboard if already logged in (after reload)
+    netlifyIdentity.on("init", user => {
+      if (user) showApp(user);
+    });
+
+    netlifyIdentity.on("login", user => {
+      showApp(user);
+      netlifyIdentity.close();
+    });
+
+    netlifyIdentity.on("logout", () => {
+      app.style.display = "none";
+      login.style.display = "block";
+      tbody.innerHTML = "";
+    });
+
+    function showApp(user) {
+      ownerName.textContent = user.user_metadata.full_name || user.email;
+      login.style.display = "none";
+      app.style.display = "block";
+      loadRows();
+    }
+
+    async function getToken() {
+      const user = netlifyIdentity.currentUser();
+      if (!user) return null;
+      return await user.jwt(); // JWT for Authorization header
+    }
+
+    async function loadRows() {
+      try {
+        const token = await getToken();
+        const res = await fetch("/.netlify/functions/getLaundry", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        const rows = await res.json();
+        render(rows);
+
+        // simple search
+        document.getElementById("q").oninput = (e) => {
+          const t = e.target.value.toLowerCase();
+          const filtered = rows.filter(r =>
+            Object.values(r).join(" ").toLowerCase().includes(t)
+          );
+          render(filtered);
+        };
+      } catch (e) {
+        alert("❌ Could not load records.");
+        console.error(e);
+      }
+    }
+
+    function render(rows) {
+      tbody.innerHTML = "";
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.Ticket}</td>
+          <td>${r.Name}</td>
+          <td>${r.Phone}</td>
+          <td>${r.Email || "-"}</td>
+          <td>${r.Clothes}</td>
+          <td>${r.Quantity}</td>
+          <td>${r.Date}</td>
+          <td>${r.Notes || "-"}</td>
+          <td>${r.Status || "Received"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>
